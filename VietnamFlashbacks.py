@@ -107,7 +107,7 @@ else:
         sys.exit(0)
 
 ntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*)')    # regexp to look for in responder logs
-crackedntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*:\w*)')    # regexp to look for in hashcat potfile
+crackedntlmv2pattern = re.compile('(^.*::\w*:\w*:\w*:\w*:.*)')    # regexp to look for in hashcat potfile
 
 try:
     while True:
