@@ -49,8 +49,6 @@ if args.responder:
     if os.path.exists(args.responder):
         print("[+] Responder path seems legit\n")
         responderdir = args.responder + "logs/"
-        print(responderdir)
-        sys.exit(0)
     else:
         print("[-] Responder path seems not legit\n")
         sys.exit()
