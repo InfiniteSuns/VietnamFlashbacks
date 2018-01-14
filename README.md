@@ -12,6 +12,6 @@ Sometimes Responder/MultiRelay fails to start a session for you, however it stil
 
 ## Usage ##
 
-There are two mandatory options:
+There is only one mandatory option, which is --responder. Without --dictionary set program will only log hashes without cracking:
 - ```-r or --responder is a path to Responder root directory (i.e. /root/git/responder)```
 - ```-d or --dictionary is a path to dictionary file of your choice (i.e. /root/dict/passwords.txt)```
