@@ -1,9 +1,7 @@
 #!/usr/bin/python3
 
 import argparse    # for getting those command line arguments
-import getopt   # for getting those command line arguments
 import os    # for os path stuff
-# import platform    # for detectind whether it is Nix or Windows
 import re    # for searching for hashes
 import subprocess    # for spawning hashcat process
 import sys    # for stopping gracefully
@@ -25,23 +23,22 @@ flashbacks = """
 print(colored(vietnam, "green", attrs=['bold']))
 print(colored(flashbacks, "green", attrs=['bold']))
 
-print(colored("Real-time NTLMv2 bruteforcer, VietnamFlashbacks 0.9.0beta", "yellow", attrs=['bold']))
+print(colored("Real-time NTLMv2 bruteforcer, VietnamFlashbacks 0.9.5beta", "yellow", attrs=['bold']))
 print("Press Ctrl+C as soon as you pwnd what you wanted\n")
 
 print("Brought to you by Dmitry Kireev (@InfiniteSuns)\n")
 
 responderdir = None    # variable to hold path to responder
 dictdir = None    # variable to hold path to dictionary
-# hashcatdir = None
 
 logfile = None    # variable to hold path to logfile
 potfile = None    # variable to hold path to potfile
 
-# osname = platform.system()
-
 argparser = argparse.ArgumentParser()
 argparser.add_argument('-r', '--responder', help="i.e. /root/github/responder", required=True)
-argparser.add_argument('-d', '--dictionary', help="i.e. /usr/share/wordlists/rockyou.txt", required=True)
+argparser.add_argument('-l', '--logging', help="only log hashes without cracking, opposed to --dictionary", action='store_true', required=False)
+argparser.add_argument('-d', '--dictionary', help="i.e. /usr/share/wordlists/rockyou.txt", required=False)
+argparser.set_defaults(logging=True)
 args = argparser.parse_args()
 
 if args.responder:
@@ -60,6 +57,11 @@ if args.dictionary:
     else:
         print("[-] Dictionary path seems not legit\n")
         sys.exit()
+if args.logging:
+    if dictdir:
+        print("[+] Logging will be done with real-time cracking\n")
+    else:
+        print("[+] Logging will be done without cracking\n")
 
 print("[i] Checking current directory")
 try:
@@ -129,52 +131,53 @@ try:
                         if not username in logfilebuf:
                             print(colored("[+] New hash discovered for " + username + ", writing to logfile",
                                           "green"))
-                            print("[i] Passing to hashcat\n")
+                            if dictdir:
+                                print("[i] Passing to hashcat\n")
 
-                            output = subprocess.Popen(
-                                "hashcat -m 5600 " + match.groups()[0] + " " + dictdir +
-                                " --potfile-path " + potfile,
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, shell=True, universal_newlines=True)
-                            results = output.stdout.readlines()
-                            errors = output.stderr.readlines()
+                                output = subprocess.Popen(
+                                    "hashcat --force -m 5600 " + match.groups()[0] + " " + dictdir +
+                                    " --potfile-path " + potfile,
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+                                results = output.stdout.readlines()
+                                errors = output.stderr.readlines()
 
-                            for error in errors:    # sometimes hashcat freezes in background, have to deal with it
-                                if "running on pid" in error:
-                                    pidpattern = re.compile('(pid \d+)')
-                                    pid = re.search(pidpattern, error).group()
-                                    pid = pid.replace("pid ", "")
+                                for error in errors:    # sometimes hashcat freezes in background, have to deal with it
+                                    if "running on pid" in error:
+                                        pidpattern = re.compile('(pid \d+)')
+                                        pid = re.search(pidpattern, error).group()
+                                        pid = pid.replace("pid ", "")
 
-                                    output = subprocess.Popen(
-                                        "kill " + pid,
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE, shell=True, universal_newlines=True)
-                                    results = output.stdout.readlines()
-                                    errors = output.stderr.readlines()
+                                        output = subprocess.Popen(
+                                            "kill " + pid,
+                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+                                        results = output.stdout.readlines()
+                                        errors = output.stderr.readlines()
 
-                                    print(colored("[!] Looks like hashcat freezed in background, had to kill it\n",
-                                                  "red"))
+                                        print(colored("[!] Looks like hashcat freezed in background, had to kill it\n",
+                                                      "red"))
 
-                            for result in results:
-                                if "Recovered" in result:
-                                    if "1/1" in result:
-                                        try:
-                                            for j, potline in enumerate(open(potfile, "r")):
-                                                for potmatch in re.finditer(crackedntlmv2pattern, potline):
-                                                    potusername = potmatch.groups()[0].split('::')[0]
-                                                    potdomain = potmatch.groups()[0].split('::')[1].split(':')[0]
+                                for result in results:
+                                    if "Recovered" in result:
+                                        if "1/1" in result:
+                                            try:
+                                                for j, potline in enumerate(open(potfile, "r")):
+                                                    for potmatch in re.finditer(crackedntlmv2pattern, potline):
+                                                        potusername = potmatch.groups()[0].split('::')[0]
+                                                        potdomain = potmatch.groups()[0].split('::')[1].split(':')[0]
 
-                                                    if username.lower() == potusername.lower() \
-                                                            and domain.lower() == potdomain.lower():
-                                                        password = potmatch.groups()[0].split('::')[1].split(':')[4]
-                                        except Exception:
-                                            print(colored("[!] Had hard time reading potfile and failed!",
-                                                          "red"))
-                                            traceback.print_exc(file=sys.stdout)
-                                            sys.exit(0)
+                                                        if username.lower() == potusername.lower() \
+                                                                and domain.lower() == potdomain.lower():
+                                                            password = potmatch.groups()[0].split('::')[1].split(':')[4]
+                                            except Exception:
+                                                print(colored("[!] Had hard time reading potfile and failed!",
+                                                              "red"))
+                                                traceback.print_exc(file=sys.stdout)
+                                                sys.exit(0)
 
-                                        print(colored("[!] Password recovered for " + username + ": " + password + "\n",
-                                                      "red", attrs=['bold']))
+                                            print(colored("[!] Password recovered for " + username + ": " + password + "\n",
+                                                          "red", attrs=['bold']))
 
                             logfileptr = open(logfile, "a")
                             logfileptr.write(match.groups()[0])
